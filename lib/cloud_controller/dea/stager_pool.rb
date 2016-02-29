@@ -8,7 +8,7 @@ module VCAP::CloudController
       def initialize(config, blobstore_url_generator)
         @advertise_timeout = config[:dea_advertisement_timeout_in_seconds]
         @percentage_of_top_stagers = (config[:placement_top_stager_percentage] || 0) / 100.0
-        @stager_advertisements = []
+        @stager_advertisements = {}
         @blobstore_url_generator = blobstore_url_generator
       end
 
@@ -16,8 +16,7 @@ module VCAP::CloudController
         advertisement = NatsMessages::StagerAdvertisement.new(msg, Time.now.utc.to_i + @advertise_timeout)
 
         mutex.synchronize do
-          remove_advertisement_for_id(advertisement.stager_id)
-          @stager_advertisements << advertisement
+          @stager_advertisements[advertisement.stager_id] = advertisement
         end
       end
 
@@ -32,7 +31,7 @@ module VCAP::CloudController
       end
 
       def reserve_app_memory(stager_id, app_memory)
-        @stager_advertisements.find { |ad| ad.stager_id == stager_id }.decrement_memory(app_memory)
+        @stager_advertisements[stager_id].decrement_memory(app_memory)
       end
 
       private
@@ -42,13 +41,13 @@ module VCAP::CloudController
       end
 
       def validate_stack_availability(stack)
-        unless @stager_advertisements.any? { |ad| ad.has_stack?(stack) }
+        unless @stager_advertisements.any? { |_, ad| ad.has_stack?(stack) }
           raise Errors::ApiError.new_from_details('StackNotFound', "The requested app stack #{stack} is not available on this system.")
         end
       end
 
       def top_n_stagers_for(memory, disk, stack)
-        @stager_advertisements.select do |advertisement|
+        @stager_advertisements.values.select do |advertisement|
           advertisement.meets_needs?(memory, stack) && advertisement.has_sufficient_disk?(disk)
         end.sort do |advertisement_a, advertisement_b|
           advertisement_a.available_memory <=> advertisement_b.available_memory
@@ -57,15 +56,7 @@ module VCAP::CloudController
 
       def prune_stale_advertisements
         now = Time.now.utc.to_i
-        @stager_advertisements.delete_if { |ad| ad.expired?(now) }
-      end
-
-      def stager_in_pool?(id)
-        @stager_advertisements.map(&:stager_id).include? id
-      end
-
-      def remove_advertisement_for_id(id)
-        @stager_advertisements.delete_if { |ad| ad.stager_id == id }
+        @stager_advertisements.delete_if { |_, ad| ad.expired?(now) }
       end
 
       def mutex

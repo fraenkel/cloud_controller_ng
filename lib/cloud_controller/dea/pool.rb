@@ -8,7 +8,7 @@ module VCAP::CloudController
         @advertise_timeout = config[:dea_advertisement_timeout_in_seconds]
         @message_bus = message_bus
         @stager_pool = stager_pool
-        @dea_advertisements = []
+        @dea_advertisements = {}
       end
 
       def register_subscriptions
@@ -26,8 +26,7 @@ module VCAP::CloudController
         advertisement = NatsMessages::DeaAdvertisement.new(message, Time.now.utc.to_i + @advertise_timeout)
 
         mutex.synchronize do
-          remove_advertisement_for_id(advertisement.dea_id)
-          @dea_advertisements << advertisement
+          @dea_advertisements[advertisement.dea_id] = advertisement
         end
       end
 
@@ -35,7 +34,7 @@ module VCAP::CloudController
         fake_advertisement = NatsMessages::DeaAdvertisement.new(message, Time.now.utc.to_i + @advertise_timeout)
 
         mutex.synchronize do
-          remove_advertisement_for_id(fake_advertisement.dea_id)
+          @dea_advertisements.delete(fake_advertisement.dea_id)
         end
       end
 
@@ -59,11 +58,11 @@ module VCAP::CloudController
         dea_id = opts[:dea_id]
         app_id = opts[:app_id]
 
-        @dea_advertisements.find { |ad| ad.dea_id == dea_id }.increment_instance_count(app_id)
+        @dea_advertisements[dea_id].increment_instance_count(app_id)
       end
 
       def reserve_app_memory(dea_id, app_memory)
-        @dea_advertisements.find { |ad| ad.dea_id == dea_id }.decrement_memory(app_memory)
+        @dea_advertisements[dea_id].decrement_memory(app_memory)
       end
 
       private
@@ -72,11 +71,7 @@ module VCAP::CloudController
 
       def prune_stale_deas
         now = Time.now.utc.to_i
-        @dea_advertisements.delete_if { |ad| ad.expired?(now) }
-      end
-
-      def remove_advertisement_for_id(id)
-        @dea_advertisements.delete_if { |ad| ad.dea_id == id }
+        @dea_advertisements.delete_if { |_, ad| ad.expired?(now) }
       end
 
       def mutex
