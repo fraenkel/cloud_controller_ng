@@ -4,14 +4,16 @@ require 'cloud_controller/dea/eligible_advertisement_filter'
 module VCAP::CloudController
   module Dea
     class Pool
-      def initialize(config, message_bus)
+      def initialize(config, message_bus, stager_pool)
         @advertise_timeout = config[:dea_advertisement_timeout_in_seconds]
         @message_bus = message_bus
+        @stager_pool = stager_pool
         @dea_advertisements = []
       end
 
       def register_subscriptions
         message_bus.subscribe('dea.advertise') do |msg|
+          @stager_pool.process_advertise_message(msg)
           process_advertise_message(msg)
         end
 

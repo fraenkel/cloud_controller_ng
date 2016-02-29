@@ -2,38 +2,29 @@ require 'spec_helper'
 
 module VCAP::CloudController
   describe VCAP::CloudController::Dea::StagerPool do
-    let(:message_bus) { CfMessageBus::MockMessageBus.new }
     let(:url_generator) { double(:url_generator) }
-    let(:staging_advertise_msg) do
+    let(:dea_advertise_msg) do
       {
         'id' => 'staging-id',
         'stacks' => ['stack-name'],
         'available_memory' => 1024,
         'available_disk' => 512,
+        'app_id_to_count' => {}
       }
     end
 
-    subject { Dea::StagerPool.new(TestConfig.config, message_bus, url_generator) }
-
-    describe '#register_subscriptions' do
-      let!(:stager_pool) { subject }
-
-      it 'finds advertised stagers' do
-        message_bus.publish('staging.advertise', staging_advertise_msg)
-        expect(stager_pool.find_stager('stack-name', 0, 0)).to eq('staging-id')
-      end
-    end
+    subject { Dea::StagerPool.new(TestConfig.config, url_generator) }
 
     describe '#find_stager' do
       describe 'stager availability' do
         it 'raises if there are no stagers with that stack' do
-          subject.process_advertise_message(staging_advertise_msg)
+          subject.process_advertise_message(dea_advertise_msg)
           expect { subject.find_stager('unknown-stack-name', 0, 0) }.to raise_error(Errors::ApiError, /The stack could not be found/)
         end
 
         it 'only finds registered stagers' do
           expect { subject.find_stager('stack-name', 0, 0) }.to raise_error(Errors::ApiError, /The stack could not be found/)
-          subject.process_advertise_message(staging_advertise_msg)
+          subject.process_advertise_message(dea_advertise_msg)
           expect(subject.find_stager('stack-name', 0, 0)).to eq('staging-id')
         end
       end
@@ -62,7 +53,7 @@ module VCAP::CloudController
       describe 'staging advertisement expiration' do
         it 'purges expired DEAs' do
           Timecop.freeze do
-            subject.process_advertise_message(staging_advertise_msg)
+            subject.process_advertise_message(dea_advertise_msg)
 
             Timecop.travel(9)
             expect(subject.find_stager('stack-name', 1024, 0)).to eq('staging-id')
@@ -77,7 +68,7 @@ module VCAP::CloudController
 
           it 'purges expired DEAs' do
             Timecop.freeze do
-              subject.process_advertise_message(staging_advertise_msg)
+              subject.process_advertise_message(dea_advertise_msg)
 
               Timecop.travel(11)
               expect(subject.find_stager('stack-name', 1024, 0)).to eq('staging-id')
@@ -91,7 +82,7 @@ module VCAP::CloudController
 
       describe 'memory capacity' do
         it 'only finds stagers that can satisfy memory request' do
-          subject.process_advertise_message(staging_advertise_msg)
+          subject.process_advertise_message(dea_advertise_msg)
           expect(subject.find_stager('stack-name', 1025, 0)).to be_nil
           expect(subject.find_stager('stack-name', 1024, 0)).to eq('staging-id')
         end
@@ -115,7 +106,7 @@ module VCAP::CloudController
 
       describe 'stack availability' do
         it 'only finds deas that can satisfy stack request' do
-          subject.process_advertise_message(staging_advertise_msg)
+          subject.process_advertise_message(dea_advertise_msg)
           expect { subject.find_stager('unknown-stack-name', 0, 0) }.to raise_error(Errors::ApiError, /The stack could not be found/)
           expect(subject.find_stager('stack-name', 0, 0)).to eq('staging-id')
         end
@@ -123,7 +114,7 @@ module VCAP::CloudController
 
       describe 'disk availability' do
         it 'only finds deas that have enough disk' do
-          subject.process_advertise_message(staging_advertise_msg)
+          subject.process_advertise_message(dea_advertise_msg)
           expect(subject.find_stager('stack-name', 1024, 512)).not_to be_nil
           expect(subject.find_stager('stack-name', 1024, 513)).to be_nil
         end

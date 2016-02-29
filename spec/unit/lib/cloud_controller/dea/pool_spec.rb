@@ -3,7 +3,8 @@ require 'spec_helper'
 module VCAP::CloudController
   describe VCAP::CloudController::Dea::Pool do
     let(:message_bus) { CfMessageBus::MockMessageBus.new }
-    subject { Dea::Pool.new(TestConfig.config, message_bus) }
+    let(:stager_pool) { double(Dea::StagerPool) }
+    subject { Dea::Pool.new(TestConfig.config, message_bus, stager_pool) }
 
     describe '#register_subscriptions' do
       let(:dea_advertise_msg) do
@@ -22,6 +23,10 @@ module VCAP::CloudController
           'version' => '1.2.3',
           'app_id_to_count' => {}
         }
+      end
+
+      before do
+        expect(stager_pool).to receive(:process_advertise_message).with(dea_advertise_msg)
       end
 
       it 'finds advertised dea' do

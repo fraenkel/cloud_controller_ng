@@ -3,15 +3,13 @@ require 'cloud_controller/dea/nats_messages/stager_advertisment'
 module VCAP::CloudController
   module Dea
     class StagerPool
-      attr_reader :config, :message_bus
+      attr_reader :config
 
-      def initialize(config, message_bus, blobstore_url_generator)
+      def initialize(config, blobstore_url_generator)
         @advertise_timeout = config[:dea_advertisement_timeout_in_seconds]
         @percentage_of_top_stagers = (config[:placement_top_stager_percentage] || 0) / 100.0
-        @message_bus = message_bus
         @stager_advertisements = []
         @blobstore_url_generator = blobstore_url_generator
-        register_subscriptions
       end
 
       def process_advertise_message(msg)
@@ -38,12 +36,6 @@ module VCAP::CloudController
       end
 
       private
-
-      def register_subscriptions
-        message_bus.subscribe('staging.advertise') do |msg|
-          process_advertise_message(msg)
-        end
-      end
 
       def admin_buildpacks
         AdminBuildpacksPresenter.new(@blobstore_url_generator).to_staging_message_array
