@@ -334,3 +334,9 @@ placement_top_stager_percentage: <%= p("cc.placement_top_stager_percentage") %>
 
 statsd_host: <%= p("cc.statsd_host") %>
 statsd_port: <%= p("cc.statsd_port") %>
+
+<% if_p('dea_next.require_ssl') do %>
+dea_client_key: /var/vcap//var/vcap/jobs/cloud_controller_ng/config/certs/dea_client.key
+dea_client_cert: /var/vcap/jobs/cloud_controller_ng/config/certs/dea_client.crt
+dea_client_ca: /var/vcap/jobs/cloud_controller_ng/config/certs/dea_ca.crt
+<% end %>
